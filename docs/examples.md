@@ -9,6 +9,7 @@ This document contains some practical examples of programs, including what the r
 3. Cast Spell
 4. Block-Preserving Explosion
 5. Fill Lake
+6. Mine Area
 
 ## 1. Mine Block
 
@@ -173,3 +174,61 @@ void check_block(block_to_check) {
 }
 ```
 This is a complex program that will fill a hole with water. It takes the block the player is looking at, and fills all blocks beside or below it with water, stopping at any blocks it runs across. Due to the scale of this spell, it's slow to run and may cause a server-side lag spike. Additionally, it has a tendancy to over-fill the stack if used on too large an area. There are a few ways you could mitigate that issue, such as doing a breadth-first algorithm (instead of depth-first) or by doing the recursion layer-by-layer. This would allow the stack to be more clear by going backwards in recursion more often, limiting the recursion depth.
+
+## 6. Mine Area
+```
+// Save var to hold the first corner position for the break spell
+save pos = null;
+
+void main()
+{
+    // If the first corner is null, the spell should try to grab the first corner
+    if (pos == null)
+    {
+        // If the raycast is null, it will just keep using this branch each time the spell is cast, so nulls are accounted for
+        pos = block_raycast(self());
+
+        // Print position to caster so they can see what they grabbed
+        print(pos);
+    }
+    else
+    {
+        // Grab second position
+        let pos2 = block_raycast(self());
+
+        // Print position to caster so they can see what they grabbed
+        print(pos2);
+
+        // Null check
+        if (pos2 == null)
+        {
+            return;
+        }
+
+        // Loop over x value, from least to greatest
+        let x = min(pos.x(), pos2.x());
+        while (x <= max(pos.x(), pos2.x()))
+        {
+            // Loop over y value, from least to greatest
+            let y = min(pos.y(), pos2.y());
+            while (y <= max(pos.y(), pos2.y()))
+            {
+                // Loop over z value, from least to greatest
+                let z = min(pos.z(), pos2.z());
+                while (z <= max(pos.z(), pos2.z()))
+                {
+                    // Mine current block
+                    mine(vec(x, y, z));
+                    ++z;
+                }
+                ++y;
+            }
+            ++x;
+        }
+
+        // Reset save var so the spell can be cast again
+        pos = null;
+    }
+}
+```
+This is a spell using a save variable. When cast the first time, it will grab the location of the block being looked at and store it in a save variable. When cast the second time, it will grab the location of the block being looked at, and break all blocks in the axis-aligned cuboid defined by it and the previously saved location. Basically, it will break all the blocks in the cube whose corners you were looking at during the first and second casting. After breaking the blocks, it resets itself so it can be cast again.
