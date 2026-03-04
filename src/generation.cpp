@@ -5,8 +5,8 @@
 #include "util.hpp"
 #include "inbuiltfuncs.hpp"
 
-Generator::Generator(const NodeProg* prog)
-    :m_prog(prog)
+Generator::Generator(const NodeProg* prog, bool hexagon_exists)
+    :m_prog(prog), m_hexagon_exists(hexagon_exists)
 { }
 
 std::vector<Pattern> Generator::generate()
@@ -102,13 +102,14 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
     if (is_post)
     {
         gemini_decomposition();
+        rotation_gambit_II();
     }
 
     switch (op)
     {
     case TokenType_::eq:
-        // Remove prev value from stack if local. Global var will be overwritten later
-        if (!var.is_global && !is_subscript)
+        // Remove prev value from stack if local. Global vars/save vars will be overwritten later
+        if (var.scope == VarScope::local && !is_subscript)
         {
             pop();
         }
@@ -140,7 +141,7 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
     }
     
     // If local
-    if (!var.is_global)
+    if (var.scope == VarScope::local)
     {
         numerical_reflection(std::to_string(-(int)m_stack_size + (int)var.stack_loc + 1));
 
@@ -155,7 +156,7 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
         }
     }
     // If global
-    else
+    else if (var.scope == VarScope::global)
     {
         // Don't duplicate if post-op
         if (!is_post)
@@ -168,6 +169,22 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
         rotation_gambit();
         surgeons_exaltation();
         huginns_gambit();
+    }
+    // If save var
+    else
+    {
+        // Don't duplicate if post-op
+        if (!is_post)
+        {
+            gemini_decomposition();
+        }
+
+        scribes_reflection();
+        // Add 2 more to stack loc if hexagon exists to account for hexagon's boilerplate patterns
+        numerical_reflection(std::to_string(var.stack_loc + m_hexagon_exists ? 3 : 1));
+        rotation_gambit();
+        surgeons_exaltation();
+        scribes_gambit();
     }
 }
 
@@ -353,18 +370,34 @@ Generator::Var Generator::gen_var_ident(const std::string ident_name, size_t lin
         
         if (iter == m_global_vars.end())
         {
-            compilation_error(std::string("Undeclared identifier: ") + ident_name, line);
+            iter = std::find_if(m_save_vars.begin(), m_save_vars.end(),
+                [&](const Var& var){ return var.name == ident_name; });
+            
+            if (iter == m_save_vars.end())
+            {
+                compilation_error(std::string("Undeclared identifier: ") + ident_name, line);
+            }
         }
     }
 
     Var& var = *iter;
 
-    if (var.is_global)
+    if (var.scope == VarScope::global)
     {
         if (!dont_gen_if_global)
         {
             muninns_reflection();
             numerical_reflection(std::to_string(var.stack_loc));
+            selection_distillation();
+        }
+    }
+    else if (var.scope == VarScope::save)
+    {
+        if (!dont_gen_if_global)
+        {
+            scribes_reflection();
+            // Add 2 more to stack loc if hexagon exists to account for hexagon's boilerplate patterns
+            numerical_reflection(std::to_string(var.stack_loc + (m_hexagon_exists ? 3 : 1)));
             selection_distillation();
         }
     }
@@ -614,7 +647,7 @@ void Generator::gen_stmt(const NodeStmt* stmt)
             }
 
             gen.gen_expr(stmt_let->expr);
-            gen.m_vars.push_back(Var{.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size - 1, .is_global = false});
+            gen.m_vars.push_back(Var{.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size - 1, .scope = VarScope::local});
         }
 
         void operator()(const NodeStmtIf* stmt_if)
@@ -751,7 +784,7 @@ void Generator::gen_func_def(const NodeFunctionDef* func_def)
     // Treat top of the stack as params
     for (Token param : params)
     {
-        m_vars.push_back(Var{.name = param.value.value(), .stack_loc = m_stack_size, .is_global = false});
+        m_vars.push_back(Var{.name = param.value.value(), .stack_loc = m_stack_size, .scope = VarScope::local});
         ++m_stack_size;
     }
 
@@ -797,6 +830,37 @@ void Generator::gen_func_def(const NodeFunctionDef* func_def)
 
 void Generator::gen_prog()
 {
+    // Gen global save vars
+    if (m_prog->save_vars.size() > 0)
+    {
+        // Gen intro to capture save var
+        add_pattern(PatternType::introspection, 0);
+
+        for (NodeGlobalSave* global_save : m_prog->save_vars)
+        {
+            if (std::find_if(m_save_vars.cbegin(), m_save_vars.cend(), [&](const Var& var){return var.name == global_save->ident.value.value();}) != m_save_vars.cend())
+            {
+                compilation_error(std::string("Global identifier already used: ") + global_save->ident.value.value(), global_save->line);
+            }
+
+            Iota save_value = gen_comp_time_expr(global_save->expr);
+            if (!save_value.has_value)
+            {
+                compilation_error(std::string("Save variable expression must be evaluable at compile time: ") + global_save->ident.value.value(), global_save->line);
+            }
+
+            // Add save value to prog so it can be accessed as a save var
+            m_output.push_back(save_value.get_iota_pattern());
+
+            // Register save vars
+            m_save_vars.push_back(Var{.name = global_save->ident.value.value(), .stack_loc = m_save_vars.size(), .scope = VarScope::save});
+        }
+
+        // Finish capturing save vars and remove list of save vars from stack (save vars are accessed from iota storage in off-hand, so they don't need to be on the stack)
+        add_pattern(PatternType::retrospection, 1);
+        pop();
+    }
+
     // Gen global var exprs
     for (NodeGlobalLet* global_let : m_prog->vars)
     {
@@ -805,10 +869,15 @@ void Generator::gen_prog()
             compilation_error(std::string("Global identifier already used: ") + global_let->ident.value.value(), global_let->line);
         }
 
+        if (std::find_if(m_save_vars.cbegin(), m_save_vars.cend(), [&](const Var& var){return var.name == global_let->ident.value.value();}) != m_save_vars.cend())
+        {
+            compilation_error(std::string("Global identifier already used as save variable: ") + global_let->ident.value.value(), global_let->line);
+        }
+
         gen_expr(global_let->expr);
 
         // Register temporarily as local var so they can reference other global vars during declaration
-        m_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_vars.size(), .is_global = false});
+        m_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_vars.size(), .scope = VarScope::local});
     }
 
     // Clear temp local vars
@@ -817,7 +886,7 @@ void Generator::gen_prog()
     // Mark global variables as declared
     for (NodeGlobalLet* global_let : m_prog->vars)
     {
-        m_global_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_global_vars.size(), .is_global = true});
+        m_global_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_global_vars.size(), .scope = VarScope::global});
     }
 
     // Account for main's jump iota

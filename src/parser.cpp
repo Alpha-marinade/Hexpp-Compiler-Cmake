@@ -702,6 +702,33 @@ std::optional<NodeProg*> Parser::parse_prog()
 
             prog->vars.push_back(global_let);
         }
+        // Check if save var
+        else if (peek().value().type == TokenType_::save && peek(1).has_value() &&
+            peek(1).value().type == TokenType_::ident &&
+            peek(2).has_value() && peek(2).value().type == TokenType_::eq)
+        {
+            // Consume sarting tokens and grab ident
+            consume();
+            NodeGlobalSave* global_save = m_allocator.alloc<NodeGlobalSave>();
+            global_save->ident = consume();
+            global_save->line = line;
+            consume();
+
+            // Parse expression
+            if (std::optional<NodeExpr*> expr = parse_expr())
+            {
+                global_save->expr = expr.value();
+            }
+            else
+            {
+                compilation_error("Expected expression", peek(-1).has_value() ? peek(-1).value().line : 1);
+            }
+
+            // Check for closing token
+            try_consume(TokenType_::semi, ';');
+
+            prog->save_vars.push_back(global_save);
+        }
         // Check if function def
         else if (std::optional<NodeFunctionDef*> func_def = parse_func_def())
         {

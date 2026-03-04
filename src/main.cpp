@@ -76,7 +76,7 @@ int main(int argc, char** argv)
     // Generate hexes
     std::vector<Pattern> patterns;
     {
-        Generator generator(prog);
+        Generator generator(prog, hexagon_exists);
         patterns = generator.generate();
     }
 

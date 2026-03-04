@@ -9,13 +9,19 @@
 
 class Generator {
 public:
+    enum VarScope {
+        local,
+        save,
+        global
+    };
+
     struct Var {
         std::string name;
         size_t stack_loc;
-        bool is_global;
+        VarScope scope;
     };
 
-    Generator(const NodeProg* root);
+    Generator(const NodeProg* root, bool hexagon_exists);
 
     std::vector<Pattern> generate();
 
@@ -237,10 +243,13 @@ private:
         size_t var_num;
     };
 
+    bool m_hexagon_exists;
+
     const NodeProg* m_prog;
     std::vector<Pattern> m_output;
     size_t m_stack_size = 0;
     std::vector<Var> m_vars {};
+    std::vector<Var> m_save_vars {};
     std::vector<Var> m_global_vars {};
     std::vector<Func> m_funcs {};
     std::vector<Scope> m_scopes {};

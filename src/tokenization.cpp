@@ -53,6 +53,7 @@ std::vector<Token> Tokenizer::tokenize()
 
     const std::map<std::string, TokenType_> identifierTokenMap {
         {"let", TokenType_::let},
+        {"save", TokenType_::save},
         {"if", TokenType_::if_},
         {"else", TokenType_::else_},
         {"while", TokenType_::while_},

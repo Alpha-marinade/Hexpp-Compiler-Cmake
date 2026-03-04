@@ -120,6 +120,11 @@ struct NodeGlobalLet : Node {
     NodeExpr* expr;
 };
 
+struct NodeGlobalSave : Node {
+    Token ident;
+    NodeExpr* expr;
+};
+
 struct NodeFunctionDefVoid : Node {
     Token ident;
     std::vector<Token> params;
@@ -137,6 +142,7 @@ struct NodeFunctionDef : Node {
 };
 
 struct NodeProg : Node {
+    std::vector<NodeGlobalSave*> save_vars;
     std::vector<NodeGlobalLet*> vars;
     std::vector<NodeFunctionDef*> funcs;
     NodeFunctionDef* main_ = nullptr;
