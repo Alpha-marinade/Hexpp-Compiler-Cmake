@@ -181,7 +181,7 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
 
         scribes_reflection();
         // Add 2 more to stack loc if hexagon exists to account for hexagon's boilerplate patterns
-        numerical_reflection(std::to_string(var.stack_loc + m_hexagon_exists ? 3 : 1));
+        numerical_reflection(std::to_string(var.stack_loc + (m_hexagon_exists ? 3 : 1)));
         rotation_gambit();
         surgeons_exaltation();
         scribes_gambit();
