@@ -43,4 +43,3 @@ FunctionsToAdd.txt
 *.log
 *.gz
 !Hex++Compiler.exe
-hexagon_config.toml
