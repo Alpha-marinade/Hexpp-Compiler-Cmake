@@ -40,7 +40,7 @@ struct NodeTermListLit : Node {
     std::vector<NodeExpr*> exprs;
 };
 
-struct NodeTermPatternLit : Node {
+struct NodeTermIotaLit : Node {
     Token pattern_lit;
 };
 
@@ -70,7 +70,7 @@ struct NodeTermNullLit : Node {
 };
 
 struct NodeTerm : Node {
-    std::variant<NodeTermUn*, NodeTermUnPost*, NodeTermNumLit*, NodeTermListLit*, NodeTermPatternLit*, NodeTermBoolLit*, NodeTermNullLit*, NodeTermVar*, NodeTermParen*, NodeTermCallFunc*> var;
+    std::variant<NodeTermUn*, NodeTermUnPost*, NodeTermNumLit*, NodeTermListLit*, NodeTermIotaLit*, NodeTermBoolLit*, NodeTermNullLit*, NodeTermVar*, NodeTermParen*, NodeTermCallFunc*> var;
 };
 
 struct NodeExprBin : Node {
@@ -120,6 +120,11 @@ struct NodeGlobalLet : Node {
     NodeExpr* expr;
 };
 
+struct NodeGlobalSave : Node {
+    Token ident;
+    NodeExpr* expr;
+};
+
 struct NodeFunctionDefVoid : Node {
     Token ident;
     std::vector<Token> params;
@@ -137,6 +142,7 @@ struct NodeFunctionDef : Node {
 };
 
 struct NodeProg : Node {
+    std::vector<NodeGlobalSave*> save_vars;
     std::vector<NodeGlobalLet*> vars;
     std::vector<NodeFunctionDef*> funcs;
     NodeFunctionDef* main_ = nullptr;
