@@ -3,9 +3,10 @@
 #include <sstream>
 
 #include "util.hpp"
+#include "inbuiltfuncs.hpp"
 
-Generator::Generator(const NodeProg* prog)
-    :m_prog(prog)
+Generator::Generator(const NodeProg* prog, bool hexagon_exists)
+    :m_prog(prog), m_hexagon_exists(hexagon_exists)
 { }
 
 std::vector<Pattern> Generator::generate()
@@ -101,13 +102,14 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
     if (is_post)
     {
         gemini_decomposition();
+        rotation_gambit_II();
     }
 
     switch (op)
     {
     case TokenType_::eq:
-        // Remove prev value from stack if local. Global var will be overwritten later
-        if (!var.is_global && !is_subscript)
+        // Remove prev value from stack if local. Global vars/save vars will be overwritten later
+        if (var.scope == VarScope::local && !is_subscript)
         {
             pop();
         }
@@ -139,7 +141,7 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
     }
     
     // If local
-    if (!var.is_global)
+    if (var.scope == VarScope::local)
     {
         numerical_reflection(std::to_string(-(int)m_stack_size + (int)var.stack_loc + 1));
 
@@ -154,7 +156,7 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
         }
     }
     // If global
-    else
+    else if (var.scope == VarScope::global)
     {
         // Don't duplicate if post-op
         if (!is_post)
@@ -168,753 +170,55 @@ void Generator::gen_assignment(const NodeTermVar* term_var, const std::variant<c
         surgeons_exaltation();
         huginns_gambit();
     }
+    // If save var
+    else
+    {
+        // Don't duplicate if post-op
+        if (!is_post)
+        {
+            gemini_decomposition();
+        }
+
+        scribes_reflection();
+        // Add 2 more to stack loc if hexagon exists to account for hexagon's boilerplate patterns
+        numerical_reflection(std::to_string(var.stack_loc + (m_hexagon_exists ? 3 : 1)));
+        rotation_gambit();
+        surgeons_exaltation();
+        scribes_gambit();
+    }
 }
 
 bool Generator::gen_inbuilt_func(const NodeDefinedFunc* func, bool is_void, bool is_member)
 {
-    std::string func_name = func->ident.value.value();
+    // Find inbuilt function
+    std::vector<InbuiltFunc>::iterator func_it = std::find_if(inbuilt_funcs.begin(), inbuilt_funcs.end(), [&](const InbuiltFunc& curr){
+        // Check if the current function matches the inbuilt function we're looking for (matches ret type, membership, number of params, and name)
+        return curr.is_void == is_void && curr.is_member == is_member && curr.num_params == func->exprs.size() &&
+                std::find(curr.names.cbegin(), curr.names.cend(), func->ident.value.value()) != curr.names.cend();
+    });
 
-    if (is_void)
+    // If it doesn't exist, then there is no inbuilt function matching the description
+    if (func_it == inbuilt_funcs.end())
     {
-        if (is_member)
-        { }
-        else
-        {
-            if (func_name == "write") {
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    scribes_gambit();
-                }
-                else
-                {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    chroniclers_gambit();
-                }
-                return true;
-            } else if (func_name == "write_akashic") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                akashas_gambit();
-                return true;
-            } else if (func_name == "print") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                reveal();
-                pop();
-                return true;
-            } else if (func_name == "execute_unsafe_no_ret") {
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    add_pattern(PatternType::hermes_gambit, -1);
-                }
-                else
-                {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    jesters_gambit();
-                    add_pattern(PatternType::hermes_gambit, -2);
-                }
-                return true;
-            } else if (func_name == "mine") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                break_block();
-                return true;
-            } else if (func_name == "effect_weakness") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                white_suns_nadir();
-                return true;
-            } else if (func_name == "effect_levitation") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                blue_suns_nadir();
-                return true;
-            } else if (func_name == "effect_withering") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                black_suns_nadir();
-                return true;
-            } else if (func_name == "effect_poison") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                red_suns_nadir();
-                return true;
-            } else if (func_name == "effect_slowness") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                green_suns_nadir();
-                return true;
-            } else if (func_name == "craft_cypher") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                craft_cypher();
-                return true;
-            } else if (func_name == "craft_trinket") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                craft_trinket();
-                return true;
-            } else if (func_name == "craft_artifact") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                craft_artifact();
-                return true;
-            } else if (func_name == "recharge_item") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                recharge_item();
-                return true;
-            } else if (func_name == "erase_item") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                erase_item();
-                return true;
-            } else if (func_name == "grow") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                overgrow();
-                return true;
-            } else if (func_name == "edify") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                edify_sapling();
-                return true;
-            } else if (func_name == "add_vel") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                impulse();
-                return true;
-            } else if (func_name == "teleport_forward") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                blink();
-                return true;
-            } else if (func_name == "play_note") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                make_note();
-                return true;
-            } else if (func_name == "fly_range") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                anchorites_flight();
-                return true;
-            } else if (func_name == "fly_duration") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                wayfarers_flight();
-                return true;
-            } else if (func_name == "change_color") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                internalize_pigment();
-                return true;
-            } else if (func_name == "change_shape") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                casters_glamour();
-                return true;
-            } else if (func_name == "place_block") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                place_block();
-                return true;
-            } else if (func_name == "destroy_liquid") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                destroy_liquid();
-                return true;
-            } else if (func_name == "destroy_fire") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                extinguish_area();
-                return true;
-            } else if (func_name == "destroy_sentinel") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                banish_sentinel();
-                return true;
-            } else if (func_name == "create_sentinel") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                summon_sentinel();
-                return true;
-            } else if (func_name == "create_block") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                conjure_block();
-                return true;
-            } else if (func_name == "create_fire") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                ignite();
-                return true;
-            } else if (func_name == "create_explosion") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                explosion();
-                return true;
-            } else if (func_name == "create_explosion_fire") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                fireball();
-                return true;
-            } else if (func_name == "create_light") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                conjure_light();
-                return true;
-            } else if (func_name == "create_water") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                create_water();
-                return true;
-            // Great Spells
-            } else if (func_name == "craft_phial") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                craft_phial();
-                return true;
-            } else if (func_name == "flay_mind") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                flay_mind();
-                return true;
-            } else if (func_name == "weather_rain") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                summon_rain();
-                return true;
-            } else if (func_name == "weather_clear") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                dispel_rain();
-                return true;
-            } else if (func_name == "fly_wings") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                altiora();
-                return true;
-            } else if (func_name == "teleport_relative") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                greater_teleport();
-                return true;
-            } else if (func_name == "teleport_to") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                prospectors_gambit();
-                compass_purification_II();
-                subtractive_distillation();
-                greater_teleport();
-                return true;
-            } else if (func_name == "effect_regeneration") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                white_suns_zenith();
-                return true;
-            } else if (func_name == "effect_night_vision") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                blue_suns_zenith();
-                return true;
-            } else if (func_name == "effect_absorption") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                black_suns_zenith();
-                return true;
-            } else if (func_name == "effect_haste") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                red_suns_zenith();
-                return true;
-            } else if (func_name == "effect_strength") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                green_suns_zenith();
-                return true;
-            } else if (func_name == "create_greater_sentinel") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                summon_greater_sentinel();
-                return true;
-            } else if (func_name == "create_lightning") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                summon_lightning();
-                return true;
-            } else if (func_name == "create_lava") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                create_lava();
-                return true;
-            }
-        }
-    }
-    else
-    {
-        if (is_member)
-        {
-            if (func_name == "pos") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                compass_purification_II();
-                return true;
-            } else if (func_name == "eye_pos") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                compass_purification();
-                return true;
-            } else if (func_name == "height") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                stadiometers_purification();
-                return true;
-            } else if (func_name == "velocity") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                pace_purification();
-                return true;
-            } else if (func_name == "forward") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                alidades_purification();
-                return true;
-            } else if (func_name == "with" || func_name == "with_back") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                integration_distillation();
-                return true;
-            } else if (func_name == "sublist") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                selection_exaltation();
-                return true;
-            } else if (func_name == "back") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                derivation_decomposition();
-                add_pattern(PatternType::bookkeepers_gambit, -1, "v-");
-                return true;
-            } else if (func_name == "reversed") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                retrograde_purification();
-                return true;
-            } else if (func_name == "without_at") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                excisors_distillation();
-                return true;
-            } else if (func_name == "with_front") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                speakers_distillation();
-                return true;
-            } else if (func_name == "without_duplicates") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                uniqueness_purification();
-                return true;
-            } else if (func_name == "front") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                speakers_decomposition();
-                add_pattern(PatternType::bookkeepers_gambit, -1, "v-");
-                return true;
-            } else if (func_name == "x") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_disintegration();
-                pop(2);
-                return true;
-            } else if (func_name == "y") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_disintegration();
-                add_pattern(PatternType::bookkeepers_gambit, -2, "v-v");
-                return true;
-            } else if (func_name == "z") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_disintegration();
-                add_pattern(PatternType::bookkeepers_gambit, -2, "vv-");
-                return true;
-            } else if (func_name == "sign") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                axial_purification();
-                return true;
-            } else if (func_name == "size" || func_name == "length" || func_name == "abs") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                length_purification();
-                return true;
-            } else if (func_name == "find") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                locators_distillation();
-                return true;
-            }
-        }
-        else
-        {
-            if (func_name == "pow") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                power_distillation();
-                return true;
-            } else if (func_name == "floor") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                floor_purification();
-                return true;
-            } else if (func_name == "ceil") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                ceiling_purification();
-                return true;
-            } else if (func_name == "min") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                dioscuri_gambit();
-                minimus_distillation();
-                rotation_gambit_II();
-                augurs_exaltation();
-                return true;
-            } else if (func_name == "max") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                dioscuri_gambit();
-                maximus_distillation();
-                rotation_gambit_II();
-                augurs_exaltation();
-                return true;
-            } else if (func_name == "as_bool") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                augurs_purification();
-                return true;
-            } else if (func_name == "random") {
-                if (func->exprs.size() == 0) {
-                    entropy_reflection();
-                } else {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    prospectors_gambit();
-                    subtractive_distillation();
-                    entropy_reflection();
-                    multiplicative_distillation();
-                    additive_distillation();
-                }
-                return true;
-            } else if (func_name == "tau") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                circle_reflection();
-                return true;
-            } else if (func_name == "pi") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                arcs_reflection();
-                return true;
-            } else if (func_name == "e") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                eulers_reflection();
-                return true;
-            } else if (func_name == "sin") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                sine_purification();
-                return true;
-            } else if (func_name == "cos") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                cosine_purification();
-                return true;
-            } else if (func_name == "tan") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                tangent_purification();
-                return true;
-            } else if (func_name == "arc_sin") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                inverse_sine_purification();
-                return true;
-            } else if (func_name == "arc_cos") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                inverse_cosine_purification();
-                return true;
-            } else if (func_name == "arc_tan") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                inverse_tangent_purification();
-                return true;
-            } else if (func_name == "angle") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                inverse_tangent_distillation();
-                return true;
-            } else if (func_name == "log") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                logarithmic_distillation();
-                return true;
-            } else if (func_name == "ln") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                eulers_reflection();
-                logarithmic_distillation();
-                return true;
-            } else if (func_name == "vec") {
-                try_gen_x_exprs(func->exprs, 3, func->line);
-                vector_exaltation();
-                return true;
-            } else if (func_name == "vec0") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_reflection_zero();
-                return true;
-            } else if (func_name == "vecXP") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_reflection_PX();
-                return true;
-            } else if (func_name == "vecXN") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_reflection_NX();
-                return true;
-            } else if (func_name == "vecYP" || func_name == "vec_up") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_reflection_PY();
-                return true;
-            } else if (func_name == "vecYN" || func_name == "vec_down") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_reflection_NY();
-                return true;
-            } else if (func_name == "vecZP") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_reflection_PZ();
-                return true;
-            } else if (func_name == "vecZN") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                vector_reflection_NZ();
-                return true;
-            } else if (func_name == "sentinel_pos") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                locate_sentinel();
-                return true;
-            } else if (func_name == "sentinel_dir_from") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                wayfind_sentinel();
-                return true;
-            } else if (func_name == "is_flying") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                aviators_purification();
-                return true;
-            } else if (func_name == "self") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                minds_reflection();
-                return true;
-            } else if (func_name == "circle_impetus_pos") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                waystone_reflection();
-                return true;
-            } else if (func_name == "circle_impetus_forward") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                lodestone_reflection();
-                return true;
-            } else if (func_name == "circle_LNW") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                lesser_fold_reflection();
-                return true;
-            } else if (func_name == "circle_USE") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                greater_fold_reflection();
-                return true;
-            } else if (func_name == "block_raycast") {
-                // Raycast from an entity
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    gemini_decomposition();
-                    compass_purification();
-                    jesters_gambit();
-                    alidades_purification();
-                    archers_distillation();
-                } else {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    archers_distillation();
-                }
-                return true;
-            } else if (func_name == "block_normal_raycast") {
-                // Raycast from an entity
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    gemini_decomposition();
-                    compass_purification();
-                    jesters_gambit();
-                    alidades_purification();
-                    architects_distillation();
-                } else {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    architects_distillation();
-                }
-                return true;
-            } else if (func_name == "entity_raycast") {
-                // Raycast from an entity
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    gemini_decomposition();
-                    compass_purification();
-                    jesters_gambit();
-                    alidades_purification();
-                    scouts_distillation();
-                } else {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    scouts_distillation();
-                }
-                return true;
-            } else if (func_name == "get_entity") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                entity_prfn();
-                return true;
-            } else if (func_name == "get_entities") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_any();
-                return true;
-            } else if (func_name == "get_animal") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                entity_prfn_animal();
-                return true;
-            } else if (func_name == "get_animals") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_animal();
-                return true;
-            } else if (func_name == "get_monster") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                entity_prfn_monster();
-                return true;
-            } else if (func_name == "get_monsters") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_monster();
-                return true;
-            } else if (func_name == "get_item") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                entity_prfn_item();
-                return true;
-            } else if (func_name == "get_items") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_item();
-                return true;
-            } else if (func_name == "get_player") {
-                try_gen_x_exprs(func->exprs, 1, func->line);
-                entity_prfn_player();
-                return true;
-            } else if (func_name == "get_players") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_player();
-                return true;
-            } else if (func_name == "get_living") {
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    entity_prfn_living();
-                } else {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    zone_dstl_living();
-                }
-                return true;
-            } else if (func_name == "get_non_animals") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_non_animal();
-                return true;
-            } else if (func_name == "get_non_monsters") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_non_monster();
-                return true;
-            } else if (func_name == "get_non_items") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_non_item();
-                return true;
-            } else if (func_name == "get_non_players") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_non_player();
-                return true;
-            } else if (func_name == "get_non_living") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                zone_dstl_non_living();
-                return true;
-            } else if (func_name == "read") {
-                if (func->exprs.size() == 0) {
-                    scribes_reflection();
-                }
-                else
-                {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    chroniclers_purification();
-                }
-                return true;
-            } else if (func_name == "can_read") {
-                if (func->exprs.size() == 0) {
-                    auditors_reflection();
-                }
-                else
-                {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    auditors_purification();
-                }
-                return true;
-            } else if (func_name == "can_write") {
-                if (func->exprs.size() == 0) {
-                    assessors_reflection();
-                }
-                else
-                {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    assessors_purification();
-                }
-                return true;
-            } else if (func_name == "read_akashic") {
-                try_gen_x_exprs(func->exprs, 2, func->line);
-                akashas_distillation();
-                return true;
-            } else if (func_name == "execute") {
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    singles_purification();
-                    muninns_reflection();
-                    nullary_reflection();
-                    huginns_gambit();
-                    add_pattern(PatternType::introspection, 0);
-                    flocks_reflection();
-                    add_pattern(PatternType::flocks_gambit, 0);
-                    derivation_decomposition();
-                    bookkeepers_gambit("v-");
-                    add_pattern(PatternType::hermes_gambit, 0);
-                    add_pattern(PatternType::retrospection, 0);
-                    rotation_gambit();
-                    add_pattern(PatternType::thoths_gambit, 0);
-                    jesters_gambit();
-                    huginns_gambit();
-                    // Account properly for stack size
-                    --m_stack_size;
-                }
-                else
-                {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    numerical_reflection("2");
-                    flocks_gambit(2);
-                    singles_purification();
-                    muninns_reflection();
-                    nullary_reflection();
-                    huginns_gambit();
-                    add_pattern(PatternType::introspection, 0);
-                    flocks_reflection();
-                    add_pattern(PatternType::flocks_gambit, 0);
-                    derivation_decomposition();
-                    bookkeepers_gambit("v-");
-                    add_pattern(PatternType::flocks_disintegration, 0);
-                    jesters_gambit();
-                    add_pattern(PatternType::hermes_gambit, 0);
-                    add_pattern(PatternType::retrospection, 0);
-                    rotation_gambit();
-                    add_pattern(PatternType::thoths_gambit, 0);
-                    jesters_gambit();
-                    huginns_gambit();
-                    // Account properly for stack size
-                    --m_stack_size;
-                }
-                return true;
-            } else if (func_name == "execute_no_ravens_mind") {
-                if (func->exprs.size() == 1) {
-                    add_pattern(PatternType::introspection, 0);
-                    flocks_reflection();
-                    add_pattern(PatternType::flocks_gambit, 0);
-                    derivation_decomposition();
-                    bookkeepers_gambit("v-");
-                    add_pattern(PatternType::hermes_gambit, 0);
-                    add_pattern(PatternType::retrospection, 0);
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    singles_purification();
-                    add_pattern(PatternType::thoths_gambit, 0);
-                    // Account properly for stack size
-                    --m_stack_size;
-                }
-                else
-                {
-                    add_pattern(PatternType::introspection, 0);
-                    flocks_reflection();
-                    add_pattern(PatternType::flocks_gambit, 0);
-                    derivation_decomposition();
-                    bookkeepers_gambit("v-");
-                    add_pattern(PatternType::flocks_disintegration, 0);
-                    jesters_gambit();
-                    add_pattern(PatternType::hermes_gambit, 0);
-                    add_pattern(PatternType::retrospection, 0);
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    numerical_reflection("2");
-                    flocks_gambit(2);
-                    singles_purification();
-                    add_pattern(PatternType::thoths_gambit, 0);
-                    // Account properly for stack size
-                    --m_stack_size;
-                }
-                return true;
-            } else if (func_name == "execute_unsafe") {
-                if (func->exprs.size() == 1) {
-                    try_gen_x_exprs(func->exprs, 1, func->line);
-                    add_pattern(PatternType::hermes_gambit, 0);
-                }
-                else
-                {
-                    try_gen_x_exprs(func->exprs, 2, func->line);
-                    jesters_gambit();
-                    add_pattern(PatternType::hermes_gambit, -1);
-                }
-                return true;
-            } else if (func_name == "patterns_remaining") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                thanatos_reflection();
-                return true;
-            } else if (func_name == "stack_size") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                flocks_reflection();
-                return true;
-            } else if (func_name == "dump_stack") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                add_pattern(PatternType::introspection, 0);
-                pop();
-                flocks_reflection();
-                add_pattern(PatternType::flocks_gambit, 0);
-                add_pattern(PatternType::retrospection, 0);
-                numerical_reflection("0");
-                singles_purification();
-                add_pattern(PatternType::thoths_gambit, 0);
-                add_pattern(PatternType::flocks_disintegration, 0);
-                return true;
-            } else if (func_name == "dump_ravens_mind") {
-                try_gen_x_exprs(func->exprs, 0, func->line);
-                muninns_reflection();
-                return true;
-            }
-        }
+        return false;
     }
 
-    return false;
+    // Generate expressions to place the values on top of the stack
+    for (NodeExpr* expr : func->exprs)
+    {
+        gen_expr(expr);
+    }
+
+    // Add patterns for inbuilt func to prog
+    for (Pattern p : func_it->get_patterns())
+    {
+        m_output.push_back(p);
+    }
+
+    // Fix stack size by removing generated expressions, removing member expression if there is one, and adding return expression if there is one
+    m_stack_size += -func->exprs.size() - (is_member ? 1 : 0) + (is_void ? 0 : 1);
+
+    return true;
 }
 
 bool Generator::gen_call_func(const NodeDefinedFunc* func)
@@ -1066,18 +370,34 @@ Generator::Var Generator::gen_var_ident(const std::string ident_name, size_t lin
         
         if (iter == m_global_vars.end())
         {
-            compilation_error(std::string("Undeclared identifier: ") + ident_name, line);
+            iter = std::find_if(m_save_vars.begin(), m_save_vars.end(),
+                [&](const Var& var){ return var.name == ident_name; });
+            
+            if (iter == m_save_vars.end())
+            {
+                compilation_error(std::string("Undeclared identifier: ") + ident_name, line);
+            }
         }
     }
 
     Var& var = *iter;
 
-    if (var.is_global)
+    if (var.scope == VarScope::global)
     {
         if (!dont_gen_if_global)
         {
             muninns_reflection();
             numerical_reflection(std::to_string(var.stack_loc));
+            selection_distillation();
+        }
+    }
+    else if (var.scope == VarScope::save)
+    {
+        if (!dont_gen_if_global)
+        {
+            scribes_reflection();
+            // Add 2 more to stack loc if hexagon exists to account for hexagon's boilerplate patterns
+            numerical_reflection(std::to_string(var.stack_loc + (m_hexagon_exists ? 3 : 1)));
             selection_distillation();
         }
     }
@@ -1163,9 +483,9 @@ void Generator::gen_term(const NodeTerm* term)
             gen.gen_assignment(term_un_post->vari, (float)((term_un_post->op_type == TokenType_::double_plus) ? 1 : -1), TokenType_::plus_eq, term_un_post->line, true);
         }
 
-        void operator()(const NodeTermNumLit* term_int_lit)
+        void operator()(const NodeTermNumLit* term_num_lit)
         {
-            gen.numerical_reflection(term_int_lit->num_lit.value.value());
+            gen.add_embedded_iota(term_num_lit->num_lit.value.value());
         }
 
         void operator()(const NodeTermListLit* term_list_lit)
@@ -1186,29 +506,26 @@ void Generator::gen_term(const NodeTerm* term)
             }
         }
 
-        void operator()(const NodeTermPatternLit* term_pattern_lit)
+        void operator()(const NodeTermIotaLit* term_pattern_lit)
         {
-            gen.add_pattern(PatternType::introspection, 0);
-            gen.add_pattern(PatternType::pattern_lit, 0, term_pattern_lit->pattern_lit.value.value());
-            gen.add_pattern(PatternType::retrospection, 1);
-            gen.add_pattern(PatternType::flocks_disintegration, 0);
+            gen.add_embedded_iota(term_pattern_lit->pattern_lit.value.value());
         }
 
         void operator()(const NodeTermBoolLit* term_bool_lit)
         {
             if (term_bool_lit->bool_.value == "true")
             {
-                gen.true_reflection();
+                gen.add_embedded_iota("True");
             }
             else
             {
-                gen.false_reflection();
+                gen.add_embedded_iota("False");
             }
         }
 
         void operator()(const NodeTermNullLit* term_null_lit)
         {
-            gen.nullary_reflection();
+            gen.add_embedded_iota("Null");
         }
 
         void operator()(const NodeTermVar* term_var)
@@ -1236,6 +553,17 @@ void Generator::gen_term(const NodeTerm* term)
 
 void Generator::gen_expr(const NodeExpr* expr)
 {
+    // Check if we can gen during compile-time
+    Iota compile_time_result = gen_comp_time_expr(expr);
+    if (compile_time_result.has_value)
+    {
+        add_pattern(PatternType::introspection, 0);
+        m_output.push_back(compile_time_result.get_iota_pattern());
+        add_pattern(PatternType::retrospection, 1);
+        add_pattern(PatternType::flocks_disintegration, 0);
+        return;
+    }
+
     struct ExprVisitor {
         Generator& gen;
         ExprVisitor (Generator& _gen) :gen(_gen) {}
@@ -1319,7 +647,7 @@ void Generator::gen_stmt(const NodeStmt* stmt)
             }
 
             gen.gen_expr(stmt_let->expr);
-            gen.m_vars.push_back(Var{.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size - 1, .is_global = false});
+            gen.m_vars.push_back(Var{.name = stmt_let->ident.value.value(), .stack_loc = gen.m_stack_size - 1, .scope = VarScope::local});
         }
 
         void operator()(const NodeStmtIf* stmt_if)
@@ -1354,6 +682,7 @@ void Generator::gen_stmt(const NodeStmt* stmt)
             // Perform bool comparison and execute
             gen.add_pattern(PatternType::augurs_exaltation, 0);
             gen.add_pattern(PatternType::hermes_gambit, 0);
+            int (*test)(int) = [](int a) {return a;};
         }
 
         void operator()(const NodeStmtWhile* stmt_while)
@@ -1455,7 +784,7 @@ void Generator::gen_func_def(const NodeFunctionDef* func_def)
     // Treat top of the stack as params
     for (Token param : params)
     {
-        m_vars.push_back(Var{.name = param.value.value(), .stack_loc = m_stack_size, .is_global = false});
+        m_vars.push_back(Var{.name = param.value.value(), .stack_loc = m_stack_size, .scope = VarScope::local});
         ++m_stack_size;
     }
 
@@ -1475,7 +804,7 @@ void Generator::gen_func_def(const NodeFunctionDef* func_def)
         end_scopes_return(false);
         // Return
         add_pattern(PatternType::hermes_gambit, -1);
-        // Remove local vars from scope
+        // Remove local vars
         m_vars.resize(m_scopes.back().var_num);
         // Pop scope
         m_scopes.pop_back();
@@ -1490,7 +819,7 @@ void Generator::gen_func_def(const NodeFunctionDef* func_def)
         jesters_gambit();
         // Return
         add_pattern(PatternType::hermes_gambit, -1);
-        // Remove local vars from scope
+        // Remove local vars
         m_vars.resize(m_scopes.back().var_num);
         // Pop scope
         m_scopes.pop_back();
@@ -1501,6 +830,37 @@ void Generator::gen_func_def(const NodeFunctionDef* func_def)
 
 void Generator::gen_prog()
 {
+    // Gen global save vars
+    if (m_prog->save_vars.size() > 0)
+    {
+        // Gen intro to capture save var
+        add_pattern(PatternType::introspection, 0);
+
+        for (NodeGlobalSave* global_save : m_prog->save_vars)
+        {
+            if (std::find_if(m_save_vars.cbegin(), m_save_vars.cend(), [&](const Var& var){return var.name == global_save->ident.value.value();}) != m_save_vars.cend())
+            {
+                compilation_error(std::string("Global identifier already used: ") + global_save->ident.value.value(), global_save->line);
+            }
+
+            Iota save_value = gen_comp_time_expr(global_save->expr);
+            if (!save_value.has_value)
+            {
+                compilation_error(std::string("Save variable expression must be evaluable at compile time: ") + global_save->ident.value.value(), global_save->line);
+            }
+
+            // Add save value to prog so it can be accessed as a save var
+            m_output.push_back(save_value.get_iota_pattern());
+
+            // Register save vars
+            m_save_vars.push_back(Var{.name = global_save->ident.value.value(), .stack_loc = m_save_vars.size(), .scope = VarScope::save});
+        }
+
+        // Finish capturing save vars and remove list of save vars from stack (save vars are accessed from iota storage in off-hand, so they don't need to be on the stack)
+        add_pattern(PatternType::retrospection, 1);
+        pop();
+    }
+
     // Gen global var exprs
     for (NodeGlobalLet* global_let : m_prog->vars)
     {
@@ -1509,10 +869,15 @@ void Generator::gen_prog()
             compilation_error(std::string("Global identifier already used: ") + global_let->ident.value.value(), global_let->line);
         }
 
+        if (std::find_if(m_save_vars.cbegin(), m_save_vars.cend(), [&](const Var& var){return var.name == global_let->ident.value.value();}) != m_save_vars.cend())
+        {
+            compilation_error(std::string("Global identifier already used as save variable: ") + global_let->ident.value.value(), global_let->line);
+        }
+
         gen_expr(global_let->expr);
 
         // Register temporarily as local var so they can reference other global vars during declaration
-        m_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_vars.size(), .is_global = false});
+        m_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_vars.size(), .scope = VarScope::local});
     }
 
     // Clear temp local vars
@@ -1521,7 +886,7 @@ void Generator::gen_prog()
     // Mark global variables as declared
     for (NodeGlobalLet* global_let : m_prog->vars)
     {
-        m_global_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_global_vars.size(), .is_global = true});
+        m_global_vars.push_back(Var{.name = global_let->ident.value.value(), .stack_loc = m_global_vars.size(), .scope = VarScope::global});
     }
 
     // Account for main's jump iota
@@ -1583,6 +948,749 @@ void Generator::gen_prog()
 }
 
 
+
+Iota Generator::gen_comp_time_expr(const NodeExpr* expr)
+{
+    // Visitor to generate compile time expression
+    struct CompileTimeExprVisitor {
+        Generator& gen;
+        Iota result;
+        CompileTimeExprVisitor (Generator& _gen) :gen(_gen) {}
+        
+        void operator()(const NodeTerm* term)
+        {
+            result = gen.gen_comp_time_term(term);
+        }
+
+        void operator()(const NodeExprBin* expr_bin)
+        {
+            result = gen.gen_comp_time_bin_expr(expr_bin);
+        }
+    };
+
+    CompileTimeExprVisitor visitor(*this);
+    std::visit(visitor, expr->var);
+    return visitor.result;
+}
+
+Iota Generator::gen_comp_time_term(const NodeTerm* term)
+{
+    // Visitor to generate compile time term
+    struct CompileTimeTermVisitor {
+        Generator& gen;
+        Iota result;
+        CompileTimeTermVisitor (Generator& _gen) :gen(_gen) {}
+        
+        void operator()(const NodeTermUn* term_un)
+        {
+            // If unary expression is a type of assignment, can't be generated at compile time
+            if (term_un->op_type == TokenType_::double_plus || term_un->op_type == TokenType_::double_dash)
+            {
+                result = Iota();
+                return;
+            }
+
+            Iota term_result = gen.gen_comp_time_term(term_un->term);
+
+            // If term can't be generated at compile time, then the whole expression can't be generated at compile time
+            if (!term_result.has_value)
+            {
+                result = Iota();
+                return;
+            }
+
+            switch (term_un->op_type)
+            {
+            case TokenType_::dash:
+                if (std::holds_alternative<double>(term_result.value))
+                {
+                    result = Iota(-std::get<double>(term_result.value));
+                }
+                else if (std::holds_alternative<std::vector<double>>(term_result.value))
+                {
+                    std::vector<double> negated_vec;
+                    for (double num : std::get<std::vector<double>>(term_result.value))
+                    {
+                        negated_vec.push_back(-num);
+                    }
+                    result = Iota(negated_vec);
+                }
+                else
+                {
+                    result = Iota();
+                }
+                break;
+            case TokenType_::tilde:
+            case TokenType_::not_:
+                if (std::holds_alternative<bool>(term_result.value))
+                {
+                    result = Iota(!std::get<bool>(term_result.value));
+                }
+                else if (std::holds_alternative<double>(term_result.value))
+                {
+                    double num = std::get<double>(term_result.value);
+
+                    // Round num to nearest integer, up in halfway cases, since bitwise operations only work on integers
+                    num = std::floor(num + 0.5);
+
+                    // Negate number
+                    num = -num;
+
+                    // Subsctract 1 since ~n is equal to -n-1
+                    num -= 1;
+
+                    result = Iota(num);
+                }
+                else
+                {
+                    result = Iota();
+                }
+                break;
+            }
+        }
+
+        void operator()(const NodeTermUnPost* term_un_post)
+        {
+            // Currently, all post-unary expressions are not compile-time evaluatable
+            result = Iota();
+        }
+
+        void operator()(const NodeTermNumLit* term_num_lit)
+        {
+            result = Iota(std::stod(term_num_lit->num_lit.value.value()));
+        }
+
+        void operator()(const NodeTermListLit* term_list_lit)
+        {
+            std::vector<Iota> expr_results;
+            for (NodeExpr* expr : term_list_lit->exprs)
+            {
+                Iota result = gen.gen_comp_time_expr(expr);
+
+                if (result.has_value)
+                {
+                    expr_results.push_back(result);
+                }
+                // If iota can't be generated at compile time, then the whole list can't be generated at compile time
+                else
+                {
+                    result = Iota();
+                    return;
+                }
+            }
+
+            result = Iota(expr_results);
+        }
+
+        void operator()(const NodeTermIotaLit* term_iota_lit)
+        {
+            result = Iota(term_iota_lit->pattern_lit.value.value());
+        }
+
+        void operator()(const NodeTermBoolLit* term_bool_lit)
+        {
+            result = Iota(term_bool_lit->bool_.value == "true");
+        }
+
+        void operator()(const NodeTermNullLit* term_null_lit)
+        {
+            result = Iota(std::monostate{});
+        }
+
+        void operator()(const NodeTermVar* term_var)
+        {
+            // For now, count as not compile-time evaluatable. May change in the future
+            result = Iota();
+        }
+
+        void operator()(const NodeTermParen* term_paren)
+        {
+            result = gen.gen_comp_time_expr(term_paren->expr);
+        }
+
+        void operator()(const NodeTermCallFunc* call_func)
+        {
+            // Try to find inbuilt function being called
+            std::vector<InbuiltFunc>::iterator func_it = std::find_if(inbuilt_funcs.begin(), inbuilt_funcs.end(), [&](const InbuiltFunc& curr){
+                // Check if the current function matches the inbuilt function we're looking for (matches ret type, membership, number of params, and name)
+                return curr.is_void == false && curr.is_member == false && curr.num_params == call_func->func->exprs.size() &&
+                        std::find(curr.names.cbegin(), curr.names.cend(), call_func->func->ident.value.value()) != curr.names.cend();
+            });
+
+            // If it doesn't exist, then there is no inbuilt function matching the description, so count as not compile-time evaluatable
+            if (func_it == inbuilt_funcs.end())
+            {
+                result = Iota();
+                return;
+            }
+
+            // If function isn't compile-time evaluatable, then count as not compile-time evaluatable
+            if (func_it->eval == nullptr)
+            {
+                result = Iota();
+                return;
+            }
+
+            // Generate compile-time results for expressions
+            std::vector<Iota> expr_results;
+            for (NodeExpr* expr : call_func->func->exprs)
+            {
+                Iota expr_result = gen.gen_comp_time_expr(expr);
+
+                if (expr_result.has_value)
+                {
+                    expr_results.push_back(expr_result);
+                }
+                // If any expression can't be generated at compile time, then the whole function call can't be generated at compile time
+                else
+                {
+                    result = Iota();
+                    return;
+                }
+            }
+
+            // Get result from inbuilt function
+            result = func_it->eval(expr_results);
+        }
+    };
+
+    CompileTimeTermVisitor visitor(*this);
+    std::visit(visitor, term->var);
+    return visitor.result;
+}
+
+Iota Generator::gen_comp_time_bin_expr(const NodeExprBin* expr_bin)
+{
+    // If binary expression is a type of assignment, can't be generated at compile time
+    if (expr_bin->op_type == TokenType_::eq || expr_bin->op_type == TokenType_::plus_eq || expr_bin->op_type == TokenType_::dash_eq || expr_bin->op_type == TokenType_::star_eq
+         || expr_bin->op_type == TokenType_::fslash_eq || expr_bin->op_type == TokenType_::mod_eq)
+    {
+        return Iota();
+    }
+
+    Iota lhs_result = gen_comp_time_expr(expr_bin->lhs);
+
+    // If left-hand side can't be generated at compile time, then the whole expression can't be generated at compile time
+    if (!lhs_result.has_value)
+    {
+        return Iota();
+    }
+
+    // If binary expression is calling a member function
+    if (expr_bin->op_type == TokenType_::dot)
+    {
+        // If rhs is a term
+        if (std::holds_alternative<NodeTerm*>(expr_bin->rhs->var))
+        {
+            NodeTerm* term = std::get<NodeTerm*>(expr_bin->rhs->var);
+            // If term is a function
+            if (std::holds_alternative<NodeTermCallFunc*>(term->var))
+            {
+                NodeTermCallFunc* term_func = std::get<NodeTermCallFunc*>(term->var);
+
+                // Try to find inbuilt member function being called
+                std::vector<InbuiltFunc>::iterator func_it = std::find_if(inbuilt_funcs.begin(), inbuilt_funcs.end(), [&](const InbuiltFunc& curr){
+                    // Check if the current function matches the inbuilt member function we're looking for (matches ret type, membership, number of params, and name)
+                    return curr.is_void == false && curr.is_member == true && curr.num_params == term_func->func->exprs.size() + 1 &&
+                            std::find(curr.names.cbegin(), curr.names.cend(), term_func->func->ident.value.value()) != curr.names.cend();
+                });
+
+                // If it doesn't exist, then there is no inbuilt member function matching the description, so count as not compile-time evaluatable
+                if (func_it == inbuilt_funcs.end())
+                {
+                    return Iota();
+                }
+
+                // If function isn't compile-time evaluatable, then count as not compile-time evaluatable
+                if (func_it->eval == nullptr)
+                {
+                    return Iota();
+                }
+
+                // Generate compile-time results for expressions, starting with left-hand side as the first expression since it's a member function
+                std::vector<Iota> expr_results = {lhs_result};
+                for (NodeExpr* expr : term_func->func->exprs)
+                {
+                    Iota expr_result = gen_comp_time_expr(expr);
+
+                    if (expr_result.has_value)
+                    {
+                        expr_results.push_back(expr_result);
+                    }
+                    // If any expression can't be generated at compile time, then the whole function call can't be generated at compile time
+                    else
+                    {
+                        return Iota();
+                    }
+                }
+
+                // Get result from inbuilt function
+                return func_it->eval(expr_results);
+            }
+            else
+            {
+                return Iota();
+            }
+        }
+        else
+        {
+            return Iota();
+        }
+    }
+
+    Iota rhs_result = gen_comp_time_expr(expr_bin->rhs);
+
+    // If right-hand side can't be generated at compile time, then the whole expression can't be generated at compile time
+    if (!rhs_result.has_value)
+    {
+        return Iota();
+    }
+
+    switch(expr_bin->op_type)
+    {
+    case TokenType_::double_eq:
+        return Iota(lhs_result == rhs_result);
+        break;
+    case TokenType_::not_eq_:
+        return Iota(lhs_result != rhs_result);
+        break;
+    case TokenType_::angle_open:
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            return Iota(std::get<double>(lhs_result.value) < std::get<double>(rhs_result.value));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::oangle_eq:
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            return Iota(std::get<double>(lhs_result.value) <= std::get<double>(rhs_result.value));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::angle_close:
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            return Iota(std::get<double>(lhs_result.value) > std::get<double>(rhs_result.value));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::cangle_eq:
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            return Iota(std::get<double>(lhs_result.value) >= std::get<double>(rhs_result.value));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::plus:
+        // Add two numbers
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            return Iota(std::get<double>(lhs_result.value) + std::get<double>(rhs_result.value));
+        }
+        // Add two vectors element-wise
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> sum_vec;
+            for (size_t i = 0; i < lhs_vec.size(); ++i)
+            {
+                sum_vec.push_back(lhs_vec[i] + rhs_vec[i]);
+            }
+            return Iota(sum_vec);
+        }
+        // Add number to each element of vector (lhs vec + rhs num)
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            double rhs_num = std::get<double>(rhs_result.value);
+
+            std::vector<double> sum_vec;
+            for (size_t i = 0; i < lhs_vec.size(); ++i)
+            {
+                sum_vec.push_back(lhs_vec[i] + rhs_num);
+            }
+            return Iota(sum_vec);
+        }
+        // Add number to each element of vector (lhs num + rhs vec)
+        else if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            double lhs_num = std::get<double>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> sum_vec;
+            for (size_t i = 0; i < rhs_vec.size(); ++i)
+            {
+                sum_vec.push_back(lhs_num + rhs_vec[i]);
+            }
+            return Iota(sum_vec);
+        }
+        else if (std::holds_alternative<std::vector<Iota>>(lhs_result.value) && std::holds_alternative<std::vector<Iota>>(rhs_result.value))
+        {
+            const std::vector<Iota>& lhs_list = std::get<std::vector<Iota>>(lhs_result.value);
+            const std::vector<Iota>& rhs_list = std::get<std::vector<Iota>>(rhs_result.value);
+
+            std::vector<Iota> concat_list = lhs_list;
+            concat_list.insert(concat_list.end(), rhs_list.begin(), rhs_list.end());
+
+            return Iota(concat_list);
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::dash:
+        // If both sides are numbers, subtract them
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            return Iota(std::get<double>(lhs_result.value) - std::get<double>(rhs_result.value));
+        }
+        // If both sides are vectors, subtract them element-wise
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> diff_vec;
+            for (size_t i = 0; i < lhs_vec.size(); ++i)
+            {
+                diff_vec.push_back(lhs_vec[i] - rhs_vec[i]);
+            }
+            return Iota(diff_vec);
+        }
+        // If one side is a vector and the other side is a number, subtract the number from each element of the vector (lhs vec - rhs num)
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            double rhs_num = std::get<double>(rhs_result.value);
+
+            std::vector<double> diff_vec;
+            for (size_t i = 0; i < lhs_vec.size(); ++i)
+            {
+                diff_vec.push_back(lhs_vec[i] - rhs_num);
+            }
+            return Iota(diff_vec);
+        }
+        // If one side is a vector and the other side is a number, subtract each element of the vector from the number (lhs num - rhs vec)
+        else if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            double lhs_num = std::get<double>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> diff_vec;
+            for (size_t i = 0; i < rhs_vec.size(); ++i)
+            {
+                diff_vec.push_back(lhs_num - rhs_vec[i]);
+            }
+            return Iota(diff_vec);
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::star:
+        // If both sides are numbers, multiply them
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            return Iota(std::get<double>(lhs_result.value) * std::get<double>(rhs_result.value));
+        }
+        // If one side is a vector and the other side is a number, multiply each element of the vector by the number (lhs vec * rhs num)
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            double rhs_num = std::get<double>(rhs_result.value);
+
+            std::vector<double> prod_vec;
+            for (size_t i = 0; i < lhs_vec.size(); ++i)
+            {
+                prod_vec.push_back(lhs_vec[i] * rhs_num);
+            }
+            return Iota(prod_vec);
+        }
+        // If one side is a vector and the other side is a number, multiply each element of the vector by the number (lhs num * rhs vec)
+        else if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            double lhs_num = std::get<double>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> prod_vec;
+            for (size_t i = 0; i < rhs_vec.size(); ++i)
+            {
+                prod_vec.push_back(lhs_num * rhs_vec[i]);
+            }
+            return Iota(prod_vec);
+        }
+        // If both sides are vectors, take their dot product
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            return Iota(std::inner_product(lhs_vec.begin(), lhs_vec.end(), rhs_vec.begin(), 0.0));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::slash_forward:
+        // If both sides are numbers, divide them
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            double rhs_num = std::get<double>(rhs_result.value);
+            if (rhs_num == 0)
+            {
+                return Iota();
+            }
+            return Iota(std::get<double>(lhs_result.value) / rhs_num);
+        }
+        // If one side is a vector and the other side is a number, divide each element of the vector by the number (lhs vec / rhs num)
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            double rhs_num = std::get<double>(rhs_result.value);
+            if (rhs_num == 0)
+            {
+                return Iota();
+            }
+
+            std::vector<double> quot_vec;
+            for (size_t i = 0; i < lhs_vec.size(); ++i)
+            {
+                quot_vec.push_back(lhs_vec[i] / rhs_num);
+            }
+            return Iota(quot_vec);
+        }
+        // If one side is a vector and the other side is a number, divide each element of the vector by the number (lhs num / rhs vec)
+        else if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            double lhs_num = std::get<double>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> quot_vec;
+            for (size_t i = 0; i < rhs_vec.size(); ++i)
+            {
+                double rhs_elem = rhs_vec[i];
+                if (rhs_elem == 0)
+                {
+                    return Iota();
+                }
+                quot_vec.push_back(lhs_num / rhs_elem);
+            }
+            return Iota(quot_vec);
+        }
+        // If both sides are vectors, take their cross product
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> cross_prod_vec = {
+                lhs_vec[1] * rhs_vec[2] - lhs_vec[2] * rhs_vec[1],
+                lhs_vec[2] * rhs_vec[0] - lhs_vec[0] * rhs_vec[2],
+                lhs_vec[0] * rhs_vec[1] - lhs_vec[1] * rhs_vec[0]
+            };
+
+            return Iota(cross_prod_vec);
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::modulus:
+        // If both sides are numbers, take modulus
+        if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            double rhs_num = std::get<double>(rhs_result.value);
+
+            if (rhs_num == 0)
+            {
+                return Iota();
+            }
+
+            double lhs_num = std::get<double>(lhs_result.value);
+
+            float sign = lhs_num >= 0 ? 1 : -1;
+
+            return Iota(sign * std::fmod(std::abs(lhs_num), std::abs(rhs_num)));
+        }
+        // If both sides are vectors, take modulus element-wise
+        else if (std::holds_alternative<std::vector<double>>(lhs_result.value) && std::holds_alternative<std::vector<double>>(rhs_result.value))
+        {
+            const std::vector<double>& lhs_vec = std::get<std::vector<double>>(lhs_result.value);
+            const std::vector<double>& rhs_vec = std::get<std::vector<double>>(rhs_result.value);
+
+            std::vector<double> mod_vec;
+            for (size_t i = 0; i < lhs_vec.size(); ++i)
+            {
+                double rhs_elem = rhs_vec[i];
+
+                if (rhs_elem == 0)
+                {
+                    return Iota();
+                }
+
+                double lhs_elem = lhs_vec[i];
+                float sign = lhs_elem >= 0 ? 1 : -1;
+
+                mod_vec.push_back(sign * std::fmod(std::abs(lhs_elem), std::abs(rhs_elem)));
+            }
+
+            return Iota(mod_vec);
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::double_amp:
+        // If both sides are booleans, take logical AND
+        if (std::holds_alternative<bool>(lhs_result.value) && std::holds_alternative<bool>(rhs_result.value))
+        {
+            return Iota(std::get<bool>(lhs_result.value) && std::get<bool>(rhs_result.value));
+        }
+        // If both sides are lists, take their intersection
+        else if (std::holds_alternative<std::vector<Iota>>(lhs_result.value) && std::holds_alternative<std::vector<Iota>>(rhs_result.value))
+        {
+            const std::vector<Iota>& lhs_list = std::get<std::vector<Iota>>(lhs_result.value);
+            const std::vector<Iota>& rhs_list = std::get<std::vector<Iota>>(rhs_result.value);
+
+            std::vector<Iota> intersection_list;
+            for (const Iota& lhs_elem : lhs_list)
+            {
+                if (std::find(rhs_list.begin(), rhs_list.end(), lhs_elem) != rhs_list.end())
+                {
+                    intersection_list.push_back(lhs_elem);
+                }
+            }
+
+            return Iota(intersection_list);
+        }
+        // If both sides are numbers, take bitwise AND
+        else if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            double lhs_num = std::get<double>(lhs_result.value);
+            double rhs_num = std::get<double>(rhs_result.value);
+
+            // Round numbers to nearest integer, up in halfway cases, since bitwise operations only work on integers
+            lhs_num = std::floor(lhs_num + 0.5);
+            rhs_num = std::floor(rhs_num + 0.5);
+
+            return Iota(static_cast<double>(static_cast<long long>(lhs_num) & static_cast<long long>(rhs_num)));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::double_bar:
+        // If both sides are booleans, take logical OR
+        if (std::holds_alternative<bool>(lhs_result.value) && std::holds_alternative<bool>(rhs_result.value))
+        {
+            return Iota(std::get<bool>(lhs_result.value) || std::get<bool>(rhs_result.value));
+        }
+        // If both sides are lists, take their union
+        else if (std::holds_alternative<std::vector<Iota>>(lhs_result.value) && std::holds_alternative<std::vector<Iota>>(rhs_result.value))
+        {
+            const std::vector<Iota>& lhs_list = std::get<std::vector<Iota>>(lhs_result.value);
+            const std::vector<Iota>& rhs_list = std::get<std::vector<Iota>>(rhs_result.value);
+
+            std::vector<Iota> union_list = lhs_list;
+
+            for (const Iota& rhs_elem : rhs_list)
+            {
+                if (std::find(lhs_list.begin(), lhs_list.end(), rhs_elem) == lhs_list.end())
+                {
+                    union_list.push_back(rhs_elem);
+                }
+            }
+
+            return Iota(union_list);
+        }
+        // If both sides are numbers, take bitwise OR
+        else if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            double lhs_num = std::get<double>(lhs_result.value);
+            double rhs_num = std::get<double>(rhs_result.value);
+
+            // Round numbers to nearest integer, up in halfway cases, since bitwise operations only work on integers
+            lhs_num = std::floor(lhs_num + 0.5);
+            rhs_num = std::floor(rhs_num + 0.5);
+
+            return Iota(static_cast<double>(static_cast<long long>(lhs_num) | static_cast<long long>(rhs_num)));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    case TokenType_::caret:
+        if (std::holds_alternative<bool>(lhs_result.value) && std::holds_alternative<bool>(rhs_result.value))
+        {
+            return Iota(std::get<bool>(lhs_result.value) != std::get<bool>(rhs_result.value));
+        }
+        else if (std::holds_alternative<std::vector<Iota>>(lhs_result.value) && std::holds_alternative<std::vector<Iota>>(rhs_result.value))
+        {
+            const std::vector<Iota>& lhs_list = std::get<std::vector<Iota>>(lhs_result.value);
+            const std::vector<Iota>& rhs_list = std::get<std::vector<Iota>>(rhs_result.value);
+
+            std::vector<Iota> sym_diff_list;
+
+            for (const Iota& lhs_elem : lhs_list)
+            {
+                if (std::find(rhs_list.begin(), rhs_list.end(), lhs_elem) == rhs_list.end())
+                {
+                    sym_diff_list.push_back(lhs_elem);
+                }
+            }
+
+            for (const Iota& rhs_elem : rhs_list)
+            {
+                if (std::find(lhs_list.begin(), lhs_list.end(), rhs_elem) == lhs_list.end())
+                {
+                    sym_diff_list.push_back(rhs_elem);
+                }
+            }
+
+            return Iota(sym_diff_list);
+        }
+        else if (std::holds_alternative<double>(lhs_result.value) && std::holds_alternative<double>(rhs_result.value))
+        {
+            double lhs_num = std::get<double>(lhs_result.value);
+            double rhs_num = std::get<double>(rhs_result.value);
+
+            // Round numbers to nearest integer, up in halfway cases, since bitwise operations only work on integers
+            lhs_num = std::floor(lhs_num + 0.5);
+            rhs_num = std::floor(rhs_num + 0.5);
+
+            return Iota(static_cast<double>(static_cast<long long>(lhs_num) ^ static_cast<long long>(rhs_num)));
+        }
+        else
+        {
+            return Iota();
+        }
+        break;
+    default:
+        return Iota();
+    }
+}
 
 void Generator::try_gen_x_exprs(std::vector<NodeExpr*> exprs, int correct_amount, size_t line)
 {
@@ -2070,11 +2178,6 @@ void Generator::nullary_reflection()
 
 void Generator::numerical_reflection(std::string value)
 {
-    if (value.find('.') != std::string::npos)
-    {
-        has_non_integer_num = true;
-    }
-
     add_pattern(PatternType::numerical_reflection, 1, value);
 }
 
@@ -2484,6 +2587,14 @@ void Generator::white_suns_nadir()
 void Generator::white_suns_zenith()
 {
     add_pattern(PatternType::white_suns_zenith, -3);
+}
+
+void Generator::add_embedded_iota(std::string val)
+{
+    add_pattern(PatternType::introspection, 0);
+    add_pattern(PatternType::embedded_iota, 0, val);
+    add_pattern(PatternType::retrospection, 1);
+    add_pattern(PatternType::flocks_disintegration, 0);
 }
 
 void Generator::add_pattern(PatternType pattern_type, size_t stack_size_net, std::optional<std::string> value)
