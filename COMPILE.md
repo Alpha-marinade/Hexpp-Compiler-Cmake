@@ -3,8 +3,8 @@
 ## Dependenсies
 
 ### Windows
-2. Mingw64 or Visual Studio 17 2022
-3. Utils in PATH:
+1. Mingw64 or Visual Studio 17 2022
+2. Utils in PATH:
 - CMake(version >=3.21)
 - gcc, g++, gdb, Ninja if you use Mingw64
 - cl if you use Visual Studio
